@@ -1,6 +1,9 @@
-basic-pitch==0.3.6
-gradio>=4.0.0,<5.0.0
+torchcrepe==0.0.23
+torch>=2.0.0
+torchaudio>=2.0.0
+aubio==0.4.9
+pretty_midi==0.2.11
 librosa==0.10.2
 soundfile==0.12.1
-numpy==1.26.4
-torch>=2.0.0
+numpy>=1.24.0,<2.0.0
+gradio>=4.0.0,<5.0.0
