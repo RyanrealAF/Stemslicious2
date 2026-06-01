@@ -311,9 +311,9 @@ def build_ui():
         with gr.Row():
             with gr.Column(scale=1):
                 audio_input = gr.Audio(
-                    label="Stem Audio",
-                    type="filepath",
-                    sources=["upload"],
+    label="Stem Audio",
+    type="filepath",
+)
                 )
                 stem_type = gr.Dropdown(
                     label="Stem Type",
