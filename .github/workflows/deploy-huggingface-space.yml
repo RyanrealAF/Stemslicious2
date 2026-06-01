@@ -1,0 +1,62 @@
+name: Deploy Hugging Face Space
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - work
+  workflow_dispatch:
+
+concurrency:
+  group: huggingface-space-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Sync repository to Hugging Face Space
+    runs-on: ubuntu-latest
+    env:
+      HF_SPACE: ${{ vars.HF_SPACE }}
+      DEFAULT_HF_SPACE: Ryanrealaf/Midi
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set target Space
+        run: |
+          if [ -z "$HF_SPACE" ]; then
+            echo "HF_SPACE=$DEFAULT_HF_SPACE" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install Hugging Face Hub client
+        run: python -m pip install --upgrade huggingface_hub
+
+      - name: Upload latest commit to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          hf_space = os.environ["HF_SPACE"]
+          token = os.environ.get("HF_TOKEN")
+          if not token:
+              raise SystemExit("Missing required HF_TOKEN repository secret.")
+
+          HfApi(token=token).upload_folder(
+              repo_id=hf_space,
+              repo_type="space",
+              folder_path=".",
+              path_in_repo="",
+              commit_message=f"Sync from GitHub commit {os.environ['GITHUB_SHA'][:7]}",
+              ignore_patterns=[
+                  ".git/*",
+                  ".github/*",
+                  "__pycache__/*",
+                  ".pytest_cache/*",
+              ],
+              delete_patterns=["*"],
+          )
+          PY
