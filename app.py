@@ -95,10 +95,10 @@ TOOL_HUB_GOALS = [
 _transcriber = None
 
 def get_transcriber(onset_thresh: float, offset_thresh: float, frame_thresh: float):
-    """
+    '''
     Return a PianoTranscription instance with updated thresholds.
     Model weights are cached after first load; only threshold attributes are patched.
-    """
+    '''
     global _transcriber
     if _transcriber is None:
         print("Loading PianoTranscription model (~165MB on first run)...")
@@ -116,9 +116,8 @@ def get_transcriber(onset_thresh: float, offset_thresh: float, frame_thresh: flo
     return _transcriber
 
 
-
 def list_music_tool_hub(goal: str = "full song to MIDI") -> tuple[list[dict[str, Any]], str]:
-    """
+    '''
     Return the available music-production MCP tools and a recommended workflow.
 
     Args:
@@ -128,7 +127,7 @@ def list_music_tool_hub(goal: str = "full song to MIDI") -> tuple[list[dict[str,
     Returns:
         tuple[list[dict[str, Any]], str]: Tool catalog entries and a concise workflow
         for the selected goal.
-    """
+    '''
     normalized_goal = (goal or "full song to MIDI").strip().lower()
 
     if "full" in normalized_goal or "song" in normalized_goal:
@@ -176,10 +175,9 @@ def list_music_tool_hub(goal: str = "full song to MIDI") -> tuple[list[dict[str,
 # ── PREPROCESSING ─────────────────────────────────────────────────────────────
 
 def load_audio(path: str) -> np.ndarray:
-    """Load to mono float32 at PREPROCESS_SR."""
+    '''Load to mono float32 at PREPROCESS_SR.'''
     y, _ = librosa.load(path, sr=PREPROCESS_SR, mono=True, dtype=np.float32)
     return y
-
 
 def normalize(y: np.ndarray, ceiling: float = 0.95) -> np.ndarray:
     peak = np.max(np.abs(y))
@@ -187,14 +185,13 @@ def normalize(y: np.ndarray, ceiling: float = 0.95) -> np.ndarray:
         y = y / peak * ceiling
     return y
 
-
 def suppress_transients(y: np.ndarray, blend: float, margin: float) -> np.ndarray:
-    """
+    '''
     HPSS Wiener soft-mask.
     Separates harmonic (sustained pitch) from percussive (transient) content.
     blend=0 → unchanged. blend=1 → harmonic only.
     Soft mask avoids binary separation artifacts at note boundaries.
-    """
+    '''
     if blend <= 0.0:
         return y
 
@@ -208,9 +205,8 @@ def suppress_transients(y: np.ndarray, blend: float, margin: float) -> np.ndarra
     min_len = min(len(y), len(y_harmonic))
     return (1.0 - blend) * y[:min_len] + blend * y_harmonic[:min_len]
 
-
 def preprocess(path: str, blend: float, margin: float) -> np.ndarray:
-    """Full chain: load → HPSS suppress → normalize → resample to PTI SR."""
+    '''Full chain: load → HPSS suppress → normalize → resample to PTI SR.'''
     y = load_audio(path)
     y = suppress_transients(y, blend=blend, margin=margin)
     y = normalize(y)
@@ -218,16 +214,13 @@ def preprocess(path: str, blend: float, margin: float) -> np.ndarray:
     y = librosa.resample(y, orig_sr=PREPROCESS_SR, target_sr=PTI_SAMPLE_RATE)
     return y.astype(np.float32)
 
-
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
-
 
 def _safe_float(value: Any, fallback: float = 0.0) -> float:
     if value is None or not np.isfinite(value):
         return fallback
     return float(value)
-
 
 def _format_recommendation_report(
     stem_guess: str,
@@ -260,12 +253,11 @@ def _format_recommendation_report(
     reason_lines = ["", "Why these settings:", *[f"- {note}" for note in confidence_notes]]
     return "\n".join(setting_lines + metric_lines + reason_lines)
 
-
 def recommend_midi_settings(
     audio_file: str | None,
     stem_hint: str = "auto",
 ) -> tuple[str, float, float, float, float, float, str]:
-    """
+    '''
     Analyze an uploaded audio stem and recommend StemToMIDI settings.
 
     This MCP-friendly tool is intended for ChatGPT clients: provide an audio file,
@@ -280,7 +272,7 @@ def recommend_midi_settings(
         tuple[str, float, float, float, float, float, str]: Recommended stem type,
         transient blend, HPSS margin, onset threshold, offset threshold, frame threshold,
         and an explanation report.
-    """
+    '''
     if audio_file is None:
         report = "No audio file provided. Upload a stem audio file so I can analyze it."
         return (
@@ -485,7 +477,7 @@ def convert_stem_to_midi(
     offset_threshold: float,
     frame_threshold: float,
 ) -> tuple[str | None, str]:
-    """
+    '''
     Convert an uploaded stem audio file into a MIDI file.
 
     Args:
@@ -499,7 +491,7 @@ def convert_stem_to_midi(
 
     Returns:
         tuple[str | None, str]: MIDI file path when notes are detected, plus a human-readable status message.
-    """
+    '''
 
     if audio_file is None:
         return None, "No audio file provided."
@@ -563,7 +555,7 @@ def convert_stem_to_midi(
 # ── GRADIO UI ─────────────────────────────────────────────────────────────────
 
 def apply_preset(stem: str) -> tuple[float, float]:
-    """
+    '''
     Return recommended transient-cleaning settings for a stem type.
 
     Args:
@@ -571,7 +563,7 @@ def apply_preset(stem: str) -> tuple[float, float]:
 
     Returns:
         tuple[float, float]: Suppression blend and HPSS margin values for the selected stem.
-    """
+    '''
     return (
         TRANSIENT_BLEND_MAP[stem],
         HPSS_MARGIN_MAP[stem],
@@ -580,109 +572,105 @@ def apply_preset(stem: str) -> tuple[float, float]:
 
 def build_ui():
     with gr.Blocks(
-        title="MusicToolHub",
-        theme=gr.themes.Base(),
-        css="footer { display: none !important; }",
+        theme=gr.themes.Monochrome(),
+        css=".gradio-container { max-width: 960px !important; } footer { display: none !important; }",
     ) as demo:
-
-        gr.Markdown("## MusicToolHub — Stem Separation to MIDI")
         gr.Markdown(
-            "Hub for 6-stem separation workflows plus frame-level polyphonic transcription using "
-            "[Kong et al. 2020](https://arxiv.org/abs/2010.01815) CRNN model "
-            "(F1=0.97 on MAPS). Handles chords, overlapping notes, velocity, and pedal. "
-            "Optimized for pitched instruments. "
-            "_Model (~165MB) downloads automatically on first run._"
+            '''
+            <div style="text-align: center;">
+                <h1 style="font-size: 2.5em;">🎵 Stem-to-MIDI Converter 🎵</h1>
+                <p style="font-size: 1.2em;">
+                    Convert your audio stems into MIDI files with this powerful tool.
+                    <br>
+                    Powered by the Piano Transcription model by Kong et al. (2020).
+                </p>
+            </div>
+            '''
         )
 
-        with gr.Accordion("Music Tool Hub (MCP)", open=True):
-            gr.Markdown(
-                "Use this hub to choose the right connected music tool: split a full "
-                "song into stems first, then analyze and convert selected stems to MIDI."
-            )
-            hub_goal = gr.Dropdown(
-                label="What do you want to do?",
-                choices=TOOL_HUB_GOALS,
-                value="full song to MIDI",
-            )
-            hub_btn = gr.Button("Show Recommended Tool Workflow", variant="secondary")
-            hub_catalog = gr.JSON(label="Available MCP Tools")
-            hub_workflow = gr.Textbox(
-                label="Recommended Workflow",
-                lines=5,
-                interactive=False,
-            )
+        with gr.Tabs():
+            with gr.TabItem("MIDI Conversion"):
+                with gr.Row(equal_height=True):
+                    with gr.Column(scale=2):
+                        audio_input = gr.Audio(
+                            label="Upload Your Audio Stem",
+                            type="filepath",
+                            elem_id="audio_input",
+                        )
+                        with gr.Row():
+                            analyze_btn = gr.Button("Analyze & Recommend Settings", variant="secondary")
+                            convert_btn = gr.Button("Convert to MIDI", variant="primary")
+                    with gr.Column(scale=1):
+                        midi_output = gr.File(label="MIDI Output (.mid)")
+                        status_output = gr.Textbox(
+                            label="Status",
+                            lines=6,
+                            interactive=False,
+                        )
 
-        with gr.Row():
-            # ── LEFT: inputs
-            with gr.Column(scale=1):
-                audio_input = gr.Audio(
-                    label="Stem Audio",
-                    type="filepath",
+            with gr.TabItem("Settings"):
+                with gr.Row():
+                    with gr.Column():
+                        gr.Markdown("### Stem Configuration")
+                        stem_type = gr.Dropdown(
+                            label="Stem Type",
+                            choices=STEM_TYPES,
+                            value="melodic / piano",
+                        )
+                        apply_btn = gr.Button("Apply Stem Preset", variant="secondary")
+
+                        gr.Markdown("### Transient Cleaning (HPSS)")
+                        with gr.Accordion("Advanced Transient Cleaning Settings", open=False):
+                            transient_blend = gr.Slider(
+                                minimum=0.0, maximum=1.0, value=0.6, step=0.01,
+                                label="Suppression Blend (0=off, 1=harmonic only)",
+                            )
+                            hpss_margin = gr.Slider(
+                                minimum=1.0, maximum=6.0, value=2.0, step=0.1,
+                                label="HPSS Margin (separation aggressiveness)",
+                            )
+
+                    with gr.Column():
+                        gr.Markdown("### AMT Thresholds")
+                        with gr.Accordion("Advanced AMT Threshold Settings", open=False):
+                            onset_thresh = gr.Slider(
+                                minimum=0.1, maximum=0.9, value=DEFAULT_ONSET_THRESH, step=0.01,
+                                label="Onset Threshold",
+                            )
+                            offset_thresh = gr.Slider(
+                                minimum=0.1, maximum=0.9, value=DEFAULT_OFFSET_THRESH, step=0.01,
+                                label="Offset Threshold",
+                            )
+                            frame_thresh = gr.Slider(
+                                minimum=0.05, maximum=0.5, value=DEFAULT_FRAME_THRESH, step=0.01,
+                                label="Frame Threshold (suppresses short/quiet notes)",
+                            )
+
+                        recommendation_output = gr.Textbox(
+                            label="Setting Recommendations",
+                            lines=10,
+                            interactive=False,
+                        )
+
+            with gr.TabItem("Music Tool Hub (MCP)"):
+                gr.Markdown(
+                    "Use this hub to choose the right connected music tool: split a full "
+                    "song into stems first, then analyze and convert selected stems to MIDI."
                 )
-                stem_hint = gr.Dropdown(
-                    label="Stem Hint for Analysis",
-                    choices=["auto"] + STEM_TYPES,
-                    value="auto",
+                hub_goal = gr.Dropdown(
+                    label="What do you want to do?",
+                    choices=TOOL_HUB_GOALS,
+                    value="full song to MIDI",
                 )
-                stem_type = gr.Dropdown(
-                    label="Stem Type",
-                    choices=STEM_TYPES,
-                    value="melodic / piano",
-                )
-
-                with gr.Accordion("Transient Cleaning (HPSS)", open=True):
-                    gr.Markdown(
-                        "_Attenuates percussive content before transcription. "
-                        "Reduces false positives from drum bleed on melodic stems. "
-                        "Keep at 0 for drums/percussive stems._"
-                    )
-                    transient_blend = gr.Slider(
-                        minimum=0.0, maximum=1.0, value=0.6, step=0.01,
-                        label="Suppression Blend (0=off, 1=harmonic only)",
-                    )
-                    hpss_margin = gr.Slider(
-                        minimum=1.0, maximum=6.0, value=2.0, step=0.1,
-                        label="HPSS Margin (separation aggressiveness)",
-                    )
-
-                with gr.Accordion("AMT Thresholds", open=False):
-                    gr.Markdown(
-                        "_All three thresholds control the CRNN post-processor. "
-                        "Lower = more notes detected, higher false positive risk. "
-                        "Defaults (0.3 / 0.3 / 0.1) match the published model._"
-                    )
-                    onset_thresh = gr.Slider(
-                        minimum=0.1, maximum=0.9, value=DEFAULT_ONSET_THRESH, step=0.01,
-                        label="Onset Threshold",
-                    )
-                    offset_thresh = gr.Slider(
-                        minimum=0.1, maximum=0.9, value=DEFAULT_OFFSET_THRESH, step=0.01,
-                        label="Offset Threshold",
-                    )
-                    frame_thresh = gr.Slider(
-                        minimum=0.05, maximum=0.5, value=DEFAULT_FRAME_THRESH, step=0.01,
-                        label="Frame Threshold (suppresses short/quiet notes)",
-                    )
-
-                apply_btn   = gr.Button("Apply Stem Preset", variant="secondary")
-                analyze_btn = gr.Button("Analyze & Recommend Settings", variant="secondary")
-                convert_btn = gr.Button("Convert to MIDI", variant="primary")
-
-            # ── RIGHT: outputs
-            with gr.Column(scale=1):
-                midi_output   = gr.File(label="MIDI Output (.mid)")
-                recommendation_output = gr.Textbox(
-                    label="Setting Recommendations",
-                    lines=16,
-                    interactive=False,
-                )
-                status_output = gr.Textbox(
-                    label="Status",
-                    lines=6,
+                hub_btn = gr.Button("Show Recommended Tool Workflow", variant="secondary")
+                hub_catalog = gr.JSON(label="Available MCP Tools")
+                hub_workflow = gr.Textbox(
+                    label="Recommended Workflow",
+                    lines=5,
                     interactive=False,
                 )
 
-        # ── Events
+        # Event handlers (wiring)
         hub_btn.click(
             fn=list_music_tool_hub,
             inputs=[hub_goal],
@@ -699,7 +687,7 @@ def build_ui():
 
         analyze_btn.click(
             fn=recommend_midi_settings,
-            inputs=[audio_input, stem_hint],
+            inputs=[audio_input, stem_type], # Changed from stem_hint
             outputs=[
                 stem_type,
                 transient_blend,
