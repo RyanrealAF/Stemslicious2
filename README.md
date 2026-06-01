@@ -60,3 +60,14 @@ If you also want ChatGPT to split a full mix before converting stems to MIDI, ad
 - **MCP server URL:** `https://reallyrogueradio-master-stem-splitter.hf.space/gradio_api/mcp/sse`
 
 See `MASTER_STEM_SPLITTER_MCP.md` for the required Space edits and a combined splitter-to-MIDI prompt.
+
+## Automatic Hugging Face deployment
+
+This repository includes a GitHub Actions workflow that syncs each pushed commit on `main`, `master`, or `work` to the Hugging Face Space.
+
+To enable it, add these repository settings in GitHub:
+
+- **Secret:** `HF_TOKEN` — a Hugging Face access token with write access to the Space.
+- **Variable:** `HF_SPACE` — optional; defaults to `Ryanrealaf/Midi` when unset.
+
+The workflow can also be started manually from the **Actions** tab with `workflow_dispatch`.
