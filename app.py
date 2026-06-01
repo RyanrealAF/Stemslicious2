@@ -1,7 +1,7 @@
 # ENTRY POINT: app.py — StemToMIDI
 # AMT stack: librosa onset detection + torchcrepe neural pitch + pretty_midi
 # Transient suppression: HPSS via librosa (harmonic soft-mask)
-# aubio removed — C extension incompatible with NumPy 2.x
+# Compatible: Gradio 6.x, huggingface_hub>=0.33.5, Python 3.10
 
 import os
 import tempfile
@@ -69,7 +69,7 @@ HPSS_MARGIN_MAP = {
 SAMPLE_RATE    = 22050
 CREPE_SR       = 16000
 MIDI_TEMPO     = 120
-DRUM_MIDI_NOTE = 38
+DRUM_MIDI_NOTE = 38   # GM snare — remap in DAW
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -88,16 +88,20 @@ def normalize(y: np.ndarray, ceiling: float = 0.95) -> np.ndarray:
 
 
 def suppress_transients(y: np.ndarray, blend: float, margin: float) -> np.ndarray:
-    """HPSS soft-mask: attenuates percussive spectrogram content before AMT."""
+    """
+    HPSS soft-mask: attenuates percussive (vertical) spectrogram content.
+    blend=0 → pass-through. blend=1 → harmonic component only.
+    Wiener soft mask avoids binary separation artifacts.
+    """
     if blend <= 0.0:
         return y
 
-    D      = librosa.stft(y)
+    D = librosa.stft(y)
     H_mag, P_mag = librosa.decompose.hpss(np.abs(D), margin=margin)
 
-    eps         = 1e-8
-    soft_mask   = H_mag / (H_mag + P_mag + eps)
-    y_harmonic  = librosa.istft(D * soft_mask, length=len(y))
+    eps        = 1e-8
+    soft_mask  = H_mag / (H_mag + P_mag + eps)
+    y_harmonic = librosa.istft(D * soft_mask, length=len(y))
 
     min_len = min(len(y), len(y_harmonic))
     return (1.0 - blend) * y[:min_len] + blend * y_harmonic[:min_len]
@@ -110,26 +114,27 @@ def preprocess(path: str, blend: float, margin: float) -> np.ndarray:
     return y
 
 
-# ── ONSET DETECTION (librosa — no C build required) ──────────────────────────
+# ── ONSET DETECTION ───────────────────────────────────────────────────────────
 
 def detect_onsets(y: np.ndarray, threshold: float) -> np.ndarray:
     """
     librosa spectral flux onset detection.
-    delta controls sensitivity: lower = more onsets detected.
+    delta = minimum height above local average to register an onset.
+    backtrack=True snaps each onset to the nearest energy trough before the peak.
     Returns onset times in seconds.
     """
     onset_times = librosa.onset.onset_detect(
         y=y,
         sr=SAMPLE_RATE,
         units="time",
-        backtrack=True,       # snap to nearest energy trough before peak
-        delta=threshold,      # minimum height above local average
-        wait=2,               # min frames between onsets (~23ms at 22050/512)
+        backtrack=True,
+        delta=threshold,
+        wait=2,
     )
     return onset_times
 
 
-# ── PITCH EXTRACTION ──────────────────────────────────────────────────────────
+# ── PITCH EXTRACTION (melodic / bass / vocal) ─────────────────────────────────
 
 def extract_pitch_crepe(
     y: np.ndarray,
@@ -139,6 +144,11 @@ def extract_pitch_crepe(
     min_freq,
     max_freq,
 ) -> list:
+    """
+    torchcrepe neural pitch detection at 16kHz.
+    For each onset window: take median of confident pitch estimates.
+    Returns list of (start_sec, end_sec, midi_note, velocity).
+    """
     if len(onsets) == 0:
         return []
 
@@ -148,7 +158,7 @@ def extract_pitch_crepe(
     freqs, confidences = torchcrepe.predict(
         audio_tensor,
         CREPE_SR,
-        hop_length=160,
+        hop_length=160,           # 10ms at 16kHz
         fmin=32.7,
         fmax=2093.0,
         model="full",
@@ -156,13 +166,14 @@ def extract_pitch_crepe(
         return_periodicity=True,
         device="cpu",
     )
-    freqs        = freqs.squeeze().numpy()
-    confidences  = confidences.squeeze().numpy()
-    hop_sec      = 160 / CREPE_SR
-    times        = np.arange(len(freqs)) * hop_sec
 
-    notes      = []
-    total_dur  = len(y) / SAMPLE_RATE
+    freqs       = freqs.squeeze().numpy()
+    confidences = confidences.squeeze().numpy()
+    hop_sec     = 160 / CREPE_SR
+    times       = np.arange(len(freqs)) * hop_sec
+
+    notes     = []
+    total_dur = len(y) / SAMPLE_RATE
 
     for i, onset in enumerate(onsets):
         offset = onsets[i + 1] if i + 1 < len(onsets) else min(onset + 0.5, total_dur)
@@ -200,7 +211,16 @@ def extract_pitch_crepe(
 
 # ── DRUM TRANSCRIPTION ────────────────────────────────────────────────────────
 
-def extract_drum_onsets(y: np.ndarray, onsets: np.ndarray, min_note_dur: float) -> list:
+def extract_drum_onsets(
+    y: np.ndarray,
+    onsets: np.ndarray,
+    min_note_dur: float,
+) -> list:
+    """
+    Drums bypass pitch detection.
+    Each onset → fixed MIDI note (GM snare 38), velocity from RMS energy.
+    Remap notes to full GM drum map in your DAW.
+    """
     notes = []
     hop   = int(0.03 * SAMPLE_RATE)
 
@@ -272,7 +292,9 @@ def convert_stem_to_midi(
         if is_drums:
             notes = extract_drum_onsets(y, onsets, min_note_dur)
         else:
-            notes = extract_pitch_crepe(y, onsets, pitch_conf, min_note_dur, freq_min, freq_max)
+            notes = extract_pitch_crepe(
+                y, onsets, pitch_conf, min_note_dur, freq_min, freq_max
+            )
     except Exception as e:
         return None, f"Pitch extraction failed: {e}"
 
@@ -292,28 +314,42 @@ def convert_stem_to_midi(
     return out_tmp.name, status
 
 
-# ── GRADIO UI ─────────────────────────────────────────────────────────────────
+# ── GRADIO UI (Gradio 6.x compatible) ────────────────────────────────────────
+
+def apply_preset(stem: str) -> tuple:
+    return (
+        TRANSIENT_BLEND_MAP[stem],
+        HPSS_MARGIN_MAP[stem],
+        ONSET_THRESH_MAP[stem],
+        PITCH_CONF_MAP[stem] or 0.5,
+        MIN_NOTE_DUR_MAP[stem],
+        MIN_FREQ_MAP[stem] or 0,
+        MAX_FREQ_MAP[stem] or 0,
+    )
+
 
 def build_ui():
     with gr.Blocks(
         title="StemToMIDI",
-        theme=gr.themes.Monochrome(),
+        theme=gr.themes.Base(),
         css="footer { display: none !important; }",
     ) as demo:
 
         gr.Markdown("## StemToMIDI")
         gr.Markdown(
-            "Converts stemmed audio to MIDI. "
-            "Pipeline: HPSS transient suppression → librosa onset detection → "
-            "torchcrepe neural pitch → pretty_midi output."
+            "Convert stemmed audio to MIDI. "
+            "Pipeline: **HPSS transient suppression** → "
+            "**librosa onset detection** → "
+            "**torchcrepe neural pitch** → "
+            "**pretty_midi output**."
         )
 
         with gr.Row():
+            # ── LEFT COLUMN: inputs
             with gr.Column(scale=1):
                 audio_input = gr.Audio(
-    label="Stem Audio",
-    type="filepath",
-)
+                    label="Stem Audio",
+                    type="filepath",
                 )
                 stem_type = gr.Dropdown(
                     label="Stem Type",
@@ -322,66 +358,80 @@ def build_ui():
                 )
 
                 with gr.Accordion("Transient Cleaning", open=True):
+                    gr.Markdown(
+                        "_HPSS separates harmonic from percussive content before pitch detection. "
+                        "Higher blend = cleaner pitch signal. Keep low for drums._"
+                    )
                     transient_blend = gr.Slider(
-                        0.0, 1.0, value=0.85, step=0.01,
-                        label="Suppression Blend (0=off, 1=harmonic only)"
+                        minimum=0.0, maximum=1.0, value=0.85, step=0.01,
+                        label="Suppression Blend (0=off, 1=harmonic only)",
                     )
                     hpss_margin = gr.Slider(
-                        1.0, 6.0, value=3.0, step=0.1,
-                        label="HPSS Margin (separation aggressiveness)"
+                        minimum=1.0, maximum=6.0, value=3.0, step=0.1,
+                        label="HPSS Margin (separation aggressiveness)",
                     )
 
                 with gr.Accordion("Detection Parameters", open=False):
                     onset_thresh = gr.Slider(
-                        0.01, 0.9, value=0.3, step=0.01,
-                        label="Onset Threshold (lower = more sensitive)"
+                        minimum=0.01, maximum=0.9, value=0.3, step=0.01,
+                        label="Onset Threshold (lower = more sensitive)",
                     )
                     pitch_conf = gr.Slider(
-                        0.1, 0.9, value=0.5, step=0.01,
-                        label="Pitch Confidence Floor (ignored for drums)"
+                        minimum=0.1, maximum=0.9, value=0.5, step=0.01,
+                        label="Pitch Confidence Floor (ignored for drums)",
                     )
                     min_note_dur = gr.Slider(
-                        0.01, 1.0, value=0.06, step=0.01,
-                        label="Min Note Duration (seconds)"
+                        minimum=0.01, maximum=1.0, value=0.06, step=0.01,
+                        label="Min Note Duration (seconds)",
                     )
-                    min_freq_in = gr.Number(label="Min Frequency Hz (0=none)", value=65.4)
-                    max_freq_in = gr.Number(label="Max Frequency Hz (0=none)", value=2093.0)
+                    min_freq_in = gr.Number(
+                        label="Min Frequency Hz (0 = no limit)",
+                        value=65.4,
+                    )
+                    max_freq_in = gr.Number(
+                        label="Max Frequency Hz (0 = no limit)",
+                        value=2093.0,
+                    )
 
                 apply_btn   = gr.Button("Apply Stem Preset", variant="secondary")
                 convert_btn = gr.Button("Convert to MIDI", variant="primary")
 
+            # ── RIGHT COLUMN: outputs
             with gr.Column(scale=1):
                 midi_output   = gr.File(label="MIDI Output (.mid)")
-                status_output = gr.Textbox(label="Status", lines=4, interactive=False)
+                status_output = gr.Textbox(
+                    label="Status",
+                    lines=4,
+                    interactive=False,
+                )
 
-        def apply_preset(stem):
-            return (
-                TRANSIENT_BLEND_MAP[stem],
-                HPSS_MARGIN_MAP[stem],
-                ONSET_THRESH_MAP[stem],
-                PITCH_CONF_MAP[stem] or 0.5,
-                MIN_NOTE_DUR_MAP[stem],
-                MIN_FREQ_MAP[stem] or 0,
-                MAX_FREQ_MAP[stem] or 0,
-            )
-
+        # ── Events
         apply_btn.click(
             fn=apply_preset,
             inputs=[stem_type],
             outputs=[
-                transient_blend, hpss_margin,
-                onset_thresh, pitch_conf, min_note_dur,
-                min_freq_in, max_freq_in,
+                transient_blend,
+                hpss_margin,
+                onset_thresh,
+                pitch_conf,
+                min_note_dur,
+                min_freq_in,
+                max_freq_in,
             ],
         )
 
         convert_btn.click(
             fn=convert_stem_to_midi,
             inputs=[
-                audio_input, stem_type,
-                transient_blend, hpss_margin,
-                onset_thresh, pitch_conf, min_note_dur,
-                min_freq_in, max_freq_in,
+                audio_input,
+                stem_type,
+                transient_blend,
+                hpss_margin,
+                onset_thresh,
+                pitch_conf,
+                min_note_dur,
+                min_freq_in,
+                max_freq_in,
             ],
             outputs=[midi_output, status_output],
         )
