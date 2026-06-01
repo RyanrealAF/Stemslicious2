@@ -121,14 +121,29 @@ def preprocess(path: str, blend: float, margin: float) -> np.ndarray:
 # ── MAIN CONVERSION ───────────────────────────────────────────────────────────
 
 def convert_stem_to_midi(
-    audio_file,
+    audio_file: str | None,
     stem_type: str,
     transient_blend: float,
     hpss_margin: float,
     onset_threshold: float,
     offset_threshold: float,
     frame_threshold: float,
-) -> tuple:
+) -> tuple[str | None, str]:
+    """
+    Convert an uploaded stem audio file into a MIDI file.
+
+    Args:
+        audio_file (str | None): Local path or uploaded file reference for the stem audio.
+        stem_type (str): Stem category used to describe the source audio.
+        transient_blend (float): HPSS harmonic blend from 0.0 (off) to 1.0 (harmonic only).
+        hpss_margin (float): HPSS separation margin; higher values isolate harmonic content more aggressively.
+        onset_threshold (float): CRNN onset threshold; lower values detect more notes.
+        offset_threshold (float): CRNN offset threshold for note endings.
+        frame_threshold (float): CRNN frame threshold for filtering short or quiet notes.
+
+    Returns:
+        tuple[str | None, str]: MIDI file path when notes are detected, plus a human-readable status message.
+    """
 
     if audio_file is None:
         return None, "No audio file provided."
@@ -191,7 +206,16 @@ def convert_stem_to_midi(
 
 # ── GRADIO UI ─────────────────────────────────────────────────────────────────
 
-def apply_preset(stem: str) -> tuple:
+def apply_preset(stem: str) -> tuple[float, float]:
+    """
+    Return recommended transient-cleaning settings for a stem type.
+
+    Args:
+        stem (str): Stem category such as melodic / piano, bass, vocal, or drums / percussive.
+
+    Returns:
+        tuple[float, float]: Suppression blend and HPSS margin values for the selected stem.
+    """
     return (
         TRANSIENT_BLEND_MAP[stem],
         HPSS_MARGIN_MAP[stem],
@@ -278,6 +302,7 @@ def build_ui():
             fn=apply_preset,
             inputs=[stem_type],
             outputs=[transient_blend, hpss_margin],
+            api_name="apply_stem_preset",
         )
 
         convert_btn.click(
@@ -292,10 +317,11 @@ def build_ui():
                 frame_thresh,
             ],
             outputs=[midi_output, status_output],
+            api_name="convert_stem_to_midi",
         )
 
     return demo
 
 
 if __name__ == "__main__":
-    build_ui().launch()
+    build_ui().launch(mcp_server=True)
