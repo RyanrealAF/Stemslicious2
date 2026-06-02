@@ -554,6 +554,256 @@ def convert_stem_to_midi(
 
 # ── GRADIO UI ─────────────────────────────────────────────────────────────────
 
+APP_CSS = """
+:root {
+    --stems-bg: #07111f;
+    --stems-panel: rgba(15, 23, 42, 0.82);
+    --stems-panel-strong: rgba(15, 23, 42, 0.96);
+    --stems-border: rgba(148, 163, 184, 0.22);
+    --stems-muted: #94a3b8;
+    --stems-text: #e2e8f0;
+    --stems-accent: #7c3aed;
+    --stems-accent-2: #06b6d4;
+    --stems-success: #22c55e;
+}
+
+body,
+.gradio-container {
+    background:
+        radial-gradient(circle at top left, rgba(124, 58, 237, 0.28), transparent 34rem),
+        radial-gradient(circle at top right, rgba(6, 182, 212, 0.22), transparent 32rem),
+        linear-gradient(135deg, #020617 0%, var(--stems-bg) 48%, #111827 100%) !important;
+    color: var(--stems-text) !important;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
+.gradio-container {
+    max-width: 1180px !important;
+    margin: 0 auto !important;
+    padding: 28px 18px 42px !important;
+}
+
+footer { display: none !important; }
+
+.stems-hero {
+    position: relative;
+    overflow: hidden;
+    padding: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 30px;
+    background:
+        linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.72)),
+        radial-gradient(circle at 80% 20%, rgba(6, 182, 212, 0.28), transparent 22rem);
+    box-shadow: 0 28px 80px rgba(2, 6, 23, 0.46);
+    margin-bottom: 22px;
+}
+
+.stems-hero::after {
+    content: "";
+    position: absolute;
+    inset: auto -10% -45% 45%;
+    height: 260px;
+    background: linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.28), rgba(6, 182, 212, 0.22));
+    filter: blur(26px);
+    transform: rotate(-8deg);
+}
+
+.stems-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border: 1px solid rgba(125, 211, 252, 0.28);
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.12);
+    color: #bae6fd;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.stems-hero h1 {
+    position: relative;
+    z-index: 1;
+    max-width: 780px;
+    margin: 18px 0 12px;
+    color: #f8fafc;
+    font-size: clamp(2.45rem, 6vw, 4.8rem);
+    line-height: 0.95;
+    letter-spacing: -0.07em;
+}
+
+.stems-hero p {
+    position: relative;
+    z-index: 1;
+    max-width: 720px;
+    margin: 0;
+    color: #cbd5e1;
+    font-size: 1.08rem;
+    line-height: 1.7;
+}
+
+.stems-metrics {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 28px;
+}
+
+.stems-metric {
+    padding: 16px;
+    border: 1px solid var(--stems-border);
+    border-radius: 18px;
+    background: rgba(15, 23, 42, 0.64);
+    backdrop-filter: blur(16px);
+}
+
+.stems-metric strong {
+    display: block;
+    color: #f8fafc;
+    font-size: 1.18rem;
+    margin-bottom: 3px;
+}
+
+.stems-metric span { color: var(--stems-muted); font-size: 0.92rem; }
+
+.gradio-container .tabs {
+    border: 1px solid var(--stems-border) !important;
+    border-radius: 24px !important;
+    background: rgba(2, 6, 23, 0.32) !important;
+    box-shadow: 0 18px 50px rgba(2, 6, 23, 0.28) !important;
+}
+
+.gradio-container .tab-nav,
+.gradio-container .tabitem {
+    background: transparent !important;
+}
+
+.stems-card,
+.stems-side-card,
+.stems-panel {
+    border: 1px solid var(--stems-border) !important;
+    border-radius: 24px !important;
+    background: var(--stems-panel) !important;
+    box-shadow: 0 18px 48px rgba(2, 6, 23, 0.22) !important;
+    padding: 18px !important;
+}
+
+.stems-side-card { background: var(--stems-panel-strong) !important; }
+
+.stems-section-title h3,
+.stems-section-title h2 {
+    color: #f8fafc;
+    margin-bottom: 6px;
+}
+
+.stems-section-title p {
+    color: var(--stems-muted);
+    margin-top: 0;
+}
+
+.stems-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.stems-step {
+    padding: 13px 14px;
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.62);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    color: #cbd5e1;
+    font-size: 0.92rem;
+}
+
+.stems-step b {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: 26px;
+    height: 26px;
+    margin-right: 8px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--stems-accent), var(--stems-accent-2));
+    color: white;
+    font-size: 0.78rem;
+}
+
+.stems-tip {
+    border-left: 3px solid var(--stems-success);
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: rgba(34, 197, 94, 0.08);
+    color: #bbf7d0;
+}
+
+.gradio-container label,
+.gradio-container .label-wrap span {
+    color: #dbeafe !important;
+    font-weight: 700 !important;
+}
+
+.gradio-container input,
+.gradio-container textarea,
+.gradio-container select,
+.gradio-container .wrap,
+.gradio-container .file-preview,
+.gradio-container .container {
+    border-color: rgba(148, 163, 184, 0.22) !important;
+    border-radius: 16px !important;
+}
+
+.gradio-container button.primary,
+.gradio-container button.secondary {
+    border-radius: 999px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.01em;
+}
+
+.gradio-container button.primary {
+    background: linear-gradient(135deg, var(--stems-accent), var(--stems-accent-2)) !important;
+    border: 0 !important;
+    box-shadow: 0 16px 34px rgba(6, 182, 212, 0.24) !important;
+}
+
+.gradio-container button.secondary {
+    border: 1px solid rgba(148, 163, 184, 0.26) !important;
+    background: rgba(15, 23, 42, 0.74) !important;
+    color: #e2e8f0 !important;
+}
+
+@media (max-width: 820px) {
+    .stems-metrics,
+    .stems-steps {
+        grid-template-columns: 1fr;
+    }
+
+    .stems-hero { padding: 24px; }
+}
+"""
+
+HERO_HTML = """
+<div class="stems-hero">
+    <div class="stems-eyebrow">Studio-grade AMT workflow</div>
+    <h1>Stem-to-MIDI conversion for serious music production.</h1>
+    <p>
+        Analyze stems, tune transcription settings, and export clean MIDI using a focused
+        polyphonic piano transcription pipeline with MCP-ready music tool routing.
+    </p>
+    <div class="stems-metrics">
+        <div class="stems-metric"><strong>01</strong><span>Upload and inspect a stem</span></div>
+        <div class="stems-metric"><strong>02</strong><span>Apply smart recommendations</span></div>
+        <div class="stems-metric"><strong>03</strong><span>Export production-ready MIDI</span></div>
+    </div>
+</div>
+"""
+
+
 def apply_preset(stem: str) -> tuple[float, float]:
     '''
     Return recommended transient-cleaning settings for a stem type.
@@ -570,105 +820,161 @@ def apply_preset(stem: str) -> tuple[float, float]:
     )
 
 
+def get_app_theme():
+    return gr.themes.Soft(
+        primary_hue="violet",
+        secondary_hue="cyan",
+        neutral_hue="slate",
+    )
+
+
 def build_ui():
-    with gr.Blocks(
-        theme=gr.themes.Monochrome(),
-        css=".gradio-container { max-width: 960px !important; } footer { display: none !important; }",
-    ) as demo:
-        gr.Markdown(
-            '''
-            <div style="text-align: center;">
-                <h1 style="font-size: 2.5em;">🎵 Stem-to-MIDI Converter 🎵</h1>
-                <p style="font-size: 1.2em;">
-                    Convert your audio stems into MIDI files with this powerful tool.
-                    <br>
-                    Powered by the Piano Transcription model by Kong et al. (2020).
-                </p>
-            </div>
-            '''
-        )
+    with gr.Blocks(title="StemToMIDI Studio") as demo:
+        gr.HTML(HERO_HTML)
 
         with gr.Tabs():
-            with gr.TabItem("MIDI Conversion"):
+            with gr.TabItem("Convert"):
+                gr.Markdown(
+                    """
+                    <div class="stems-steps">
+                        <div class="stems-step"><b>1</b>Upload a melodic, bass, vocal, or piano stem.</div>
+                        <div class="stems-step"><b>2</b>Run the analyzer to tune HPSS and AMT thresholds.</div>
+                        <div class="stems-step"><b>3</b>Convert and download the generated MIDI file.</div>
+                    </div>
+                    """
+                )
                 with gr.Row(equal_height=True):
-                    with gr.Column(scale=2):
+                    with gr.Column(scale=7, elem_classes="stems-card"):
+                        gr.Markdown(
+                            """
+                            <div class="stems-section-title">
+                                <h2>Conversion desk</h2>
+                                <p>Start here with an isolated stem, then let the analyzer dial in the best first-pass settings.</p>
+                            </div>
+                            """
+                        )
                         audio_input = gr.Audio(
-                            label="Upload Your Audio Stem",
+                            label="Audio stem",
                             type="filepath",
                             elem_id="audio_input",
                         )
                         with gr.Row():
-                            analyze_btn = gr.Button("Analyze & Recommend Settings", variant="secondary")
-                            convert_btn = gr.Button("Convert to MIDI", variant="primary")
-                    with gr.Column(scale=1):
-                        midi_output = gr.File(label="MIDI Output (.mid)")
+                            analyze_btn = gr.Button("Analyze settings", variant="secondary", size="lg")
+                            convert_btn = gr.Button("Convert to MIDI", variant="primary", size="lg")
+                        gr.Markdown(
+                            """
+                            <div class="stems-tip">
+                                Tip: For full songs, split the mix first, then convert only the stem with the musical line you need.
+                            </div>
+                            """
+                        )
+                    with gr.Column(scale=5, elem_classes="stems-side-card"):
+                        gr.Markdown(
+                            """
+                            <div class="stems-section-title">
+                                <h3>Results</h3>
+                                <p>Your MIDI export and transcription summary will appear here.</p>
+                            </div>
+                            """
+                        )
+                        midi_output = gr.File(label="MIDI output (.mid)")
                         status_output = gr.Textbox(
-                            label="Status",
-                            lines=6,
+                            label="Conversion status",
+                            lines=7,
                             interactive=False,
                         )
 
-            with gr.TabItem("Settings"):
-                with gr.Row():
-                    with gr.Column():
-                        gr.Markdown("### Stem Configuration")
+            with gr.TabItem("Tune"):
+                with gr.Row(equal_height=True):
+                    with gr.Column(elem_classes="stems-card"):
+                        gr.Markdown(
+                            """
+                            <div class="stems-section-title">
+                                <h2>Stem profile</h2>
+                                <p>Choose a preset or use analysis results to match the source instrument.</p>
+                            </div>
+                            """
+                        )
                         stem_type = gr.Dropdown(
-                            label="Stem Type",
+                            label="Stem type",
                             choices=STEM_TYPES,
                             value="melodic / piano",
                         )
-                        apply_btn = gr.Button("Apply Stem Preset", variant="secondary")
+                        apply_btn = gr.Button("Apply stem preset", variant="secondary")
 
-                        gr.Markdown("### Transient Cleaning (HPSS)")
-                        with gr.Accordion("Advanced Transient Cleaning Settings", open=False):
-                            transient_blend = gr.Slider(
-                                minimum=0.0, maximum=1.0, value=0.6, step=0.01,
-                                label="Suppression Blend (0=off, 1=harmonic only)",
-                            )
-                            hpss_margin = gr.Slider(
-                                minimum=1.0, maximum=6.0, value=2.0, step=0.1,
-                                label="HPSS Margin (separation aggressiveness)",
-                            )
+                        gr.Markdown(
+                            """
+                            <div class="stems-section-title">
+                                <h3>Transient cleaning</h3>
+                                <p>Use HPSS to reduce bleed and isolate sustained pitched content before transcription.</p>
+                            </div>
+                            """
+                        )
+                        transient_blend = gr.Slider(
+                            minimum=0.0, maximum=1.0, value=0.6, step=0.01,
+                            label="Suppression blend",
+                            info="0 keeps the original stem; 1 keeps only the harmonic component.",
+                        )
+                        hpss_margin = gr.Slider(
+                            minimum=1.0, maximum=6.0, value=2.0, step=0.1,
+                            label="HPSS margin",
+                            info="Higher values separate harmonic content more aggressively.",
+                        )
 
-                    with gr.Column():
-                        gr.Markdown("### AMT Thresholds")
-                        with gr.Accordion("Advanced AMT Threshold Settings", open=False):
-                            onset_thresh = gr.Slider(
-                                minimum=0.1, maximum=0.9, value=DEFAULT_ONSET_THRESH, step=0.01,
-                                label="Onset Threshold",
-                            )
-                            offset_thresh = gr.Slider(
-                                minimum=0.1, maximum=0.9, value=DEFAULT_OFFSET_THRESH, step=0.01,
-                                label="Offset Threshold",
-                            )
-                            frame_thresh = gr.Slider(
-                                minimum=0.05, maximum=0.5, value=DEFAULT_FRAME_THRESH, step=0.01,
-                                label="Frame Threshold (suppresses short/quiet notes)",
-                            )
-
+                    with gr.Column(elem_classes="stems-side-card"):
+                        gr.Markdown(
+                            """
+                            <div class="stems-section-title">
+                                <h2>AMT thresholds</h2>
+                                <p>Balance sensitivity and false positives for cleaner note events.</p>
+                            </div>
+                            """
+                        )
+                        onset_thresh = gr.Slider(
+                            minimum=0.1, maximum=0.9, value=DEFAULT_ONSET_THRESH, step=0.01,
+                            label="Onset threshold",
+                            info="Lower detects more notes; higher reduces spurious attacks.",
+                        )
+                        offset_thresh = gr.Slider(
+                            minimum=0.1, maximum=0.9, value=DEFAULT_OFFSET_THRESH, step=0.01,
+                            label="Offset threshold",
+                            info="Controls note-ending detection.",
+                        )
+                        frame_thresh = gr.Slider(
+                            minimum=0.05, maximum=0.5, value=DEFAULT_FRAME_THRESH, step=0.01,
+                            label="Frame threshold",
+                            info="Higher values suppress short or quiet notes.",
+                        )
                         recommendation_output = gr.Textbox(
-                            label="Setting Recommendations",
-                            lines=10,
+                            label="Analyzer recommendations",
+                            lines=12,
                             interactive=False,
                         )
 
-            with gr.TabItem("Music Tool Hub (MCP)"):
-                gr.Markdown(
-                    "Use this hub to choose the right connected music tool: split a full "
-                    "song into stems first, then analyze and convert selected stems to MIDI."
-                )
-                hub_goal = gr.Dropdown(
-                    label="What do you want to do?",
-                    choices=TOOL_HUB_GOALS,
-                    value="full song to MIDI",
-                )
-                hub_btn = gr.Button("Show Recommended Tool Workflow", variant="secondary")
-                hub_catalog = gr.JSON(label="Available MCP Tools")
-                hub_workflow = gr.Textbox(
-                    label="Recommended Workflow",
-                    lines=5,
-                    interactive=False,
-                )
+            with gr.TabItem("Tool Hub"):
+                with gr.Row(equal_height=True):
+                    with gr.Column(scale=4, elem_classes="stems-card"):
+                        gr.Markdown(
+                            """
+                            <div class="stems-section-title">
+                                <h2>Music Tool Hub</h2>
+                                <p>Route larger production tasks through the right MCP tool before MIDI conversion.</p>
+                            </div>
+                            """
+                        )
+                        hub_goal = gr.Dropdown(
+                            label="Goal",
+                            choices=TOOL_HUB_GOALS,
+                            value="full song to MIDI",
+                        )
+                        hub_btn = gr.Button("Show recommended workflow", variant="primary")
+                    with gr.Column(scale=6, elem_classes="stems-side-card"):
+                        hub_workflow = gr.Textbox(
+                            label="Recommended workflow",
+                            lines=7,
+                            interactive=False,
+                        )
+                        hub_catalog = gr.JSON(label="Available MCP tools")
 
         # Event handlers (wiring)
         hub_btn.click(
@@ -687,7 +993,7 @@ def build_ui():
 
         analyze_btn.click(
             fn=recommend_midi_settings,
-            inputs=[audio_input, stem_type], # Changed from stem_hint
+            inputs=[audio_input, stem_type],
             outputs=[
                 stem_type,
                 transient_blend,
@@ -717,6 +1023,5 @@ def build_ui():
 
     return demo
 
-
 if __name__ == "__main__":
-    build_ui().launch(mcp_server=True)
+    build_ui().launch(mcp_server=True, theme=get_app_theme(), css=APP_CSS)
